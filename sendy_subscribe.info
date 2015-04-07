@@ -1,0 +1,6 @@
+name = Sendy Subscribe
+description = A simple block and page module to allow subscriptions to Sendy lists
+core = 7.x
+dependencies[] = block
+dependencies[] = newsletter
+files[] = sendy_subscribe.test

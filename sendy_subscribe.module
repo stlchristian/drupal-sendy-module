@@ -1,0 +1,177 @@
+<?php
+/**
+ * @file
+ * Module file for sendy_subscribe.
+ */
+
+/**
+ * @defgroup sendy_subscribe Sendy Subscribe
+ *
+ * This is a simple module that provides a block and a page where a user
+ * is able to subscribe to configurable mailing lists that reside on an
+ * instance of Sendy.
+ *
+ * Currently, we only have one block which is influenced very heavily by
+ * the newsletter module. It will have the following pieces:
+ *   - A 'prefix' with some (optional) text that can be placed before the
+ *     subscription form.
+ *   - A form that collects the user's email address and send them to
+ *     the subscription page.
+ *   - A 'suffix' with some (optional) text that can be placed after the
+ *     subscription form.
+ */
+
+/**
+ * Implements hook_block_info().
+ */
+function sendy_subscribe_block_info() {
+
+  $blocks['sendy_subscribe_block'] = array(
+    'info' => t('Sendy subscription block'),
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function sendy_subscribe_block_configure($delta = '') {
+
+  $form = array();
+  if ($delta == 'sendy_subscribe_block') {
+    $form['sendy_subscribe_block_prefix'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Text to appear before the email address form'),
+      '#description' => t('This text will appear above the email address form in the subscrib block.',
+      '#default_value' => variable_get('sendy_subscribe_prefix'),
+    );
+    $form['sendy_subscribe_block_suffix'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Text to appear after the email address form'),
+      '#description' => t('This text will appear below the email address form in the subscrib block.',
+      '#default_value' => variable_get('sendy_subscribe_suffix'),
+    );
+  }
+  return $form;
+}
+
+/**
+ * Implements hook_block_save().
+ */
+function sendy_subscribe_block_save($delta = '', $edit = array()) {
+  if ($delta == 'sendy_subscribe_block') {
+    // Save configuration settings to the database
+    variable_set('sendy_subscribe_prefix', $edit['sendy_subscribe_prefix']);
+    variable_set('sendy_subscribe_suffix', $edit['sendy_subscribe_suffix']);
+  }
+  return;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function sendy_subscribe_block_view($delta = '') {
+  switch ($delta) {
+    case 'sendy_subscribe_block':
+      if ( user_access('subscribe sendy newsletters') ) {
+        sendy_subscribe_add_js();
+        module_load_include('inc', 'newsletter', 'includes/newsletter.pages');
+        $block['subject'] = t('Subscribe to Sendy Mailing Lists');
+        $block['content'][] = array(
+          '#prefix' => '<div class="prefix">',
+          '#markup' => check_plain(variable_get('sendy_subscribe_block_prefix')),
+          '#suffix' => '</div>',
+        );
+        $block['content'][] = drupal_get_form('sendy_subscribe_subscribe_form');
+        $block['content'][] = array(
+          '#prefix' => '<div class="suffix">',
+          '#markup' => check_plain(variable_get('sendy_subscribe_block_suffix')),
+          '#suffix' => '</div>',
+      }
+      else {
+        $block = array();
+      }
+      break;
+  }
+  return $block;
+}
+
+function sendy_subscribe_add_js() {
+}
+
+/**
+ * Loads up the form that is displayed to the sendy subscribe block
+ */
+function sendy_subscribe_subscribe_form($form, &$form_state) {
+  global $user;
+
+  $ajax = array(
+    'callback' => 'sendy_subscribe_subscribe_form_submit',
+    'wrapper' => 'newsletter-error',
+    'effect' => 'fade',
+    'progress' => array(
+      'type' => 'throbber',
+      'message' => NULL,
+    ),
+    'event' => 'click',
+  );
+  if (!isset($user->mail) || variable_get('sendy_subscribe_show_email_in_block', FALSE)) {
+    $form['email'] = array(
+      '#type' => 'textfield',
+      '#default_value' => t('user@example.com'),
+      '#size' => 20,
+      '#required' => TRUE,
+    );
+  }
+  else {
+    $form['logged-in'] = array(
+      '#type' => 'hidden',
+      '#value' => TRUE,
+    );
+  }
+
+  $form['newsletter-submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Subscribe'),
+    '#prefix' => '<div id="newsletter-error"></div><div id="subscribe">',
+    '#suffix' => '</div>',
+    '#ajax' => $ajax,
+  );
+  return $form;
+}
+
+/**
+ * Callback of sendy subscription block. Degrades when js is off.
+ * Validates e-mail and sends user to next step.
+ */
+function sendy_subscribe_subscribe_form_submit($form, &$form_state) {
+  $is_ajax = isset($form_state['input']['ajax_page_state']);
+
+  if (isset($form_state['values']['logged-in'])) {
+    global $user;
+    $mail = $user->mail;
+  }
+  elseif (!isset($form_state['values']['logged-in'])) {
+    $mail = ($form_state['values']['email'] != t('user@example.com'))
+    ? $form_state['values']['email']
+    : '';
+  }
+
+  if (!valid_email_address($mail) || newsletter_is_subscribed($mail)) {
+    $msg = t("This e-mail doesn't exist or you have already subscribed");
+    return $is_ajax ? '<div id="newsletter-error">' . $msg . '</div>' : drupal_set_message($msg, 'warning');;
+  }
+
+  $q = array(
+    'destination' => '',
+    'email' => $mail,
+  );
+  $url = url('sendy/subscribe', array('query' => $q));
+  if ($is_ajax) {
+    return "<script type='text/javascript'>
+        location.href='$url'
+      </script>";
+  }
+
+  drupal_goto('sendy/subscribe', array('query' => $q));
+}

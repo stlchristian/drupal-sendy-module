@@ -1,0 +1,15 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the sendy_subscribe module.
+ */
+
+/**
+ * Implements hook_uninstall().
+ *
+ * @ingroup sendy_subscribe
+ */
+function sendy_subscribe_uninstall() {
+  variabel_del('sendy_subscribe_prefix');
+  variabel_del('sendy_subscribe_suffix');
+}
